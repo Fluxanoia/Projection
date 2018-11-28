@@ -15,6 +15,12 @@
 #define WINDOW_HEIGHT_MID (WINDOW_HEIGHT >> 1)
 // The length from the origin to the end of the axis
 #define AXIS_LENGTH 100
+// The size of the axis arrow
+#define AXIS_ARROW_SIZE (AXIS_LENGTH / 20)
+// How large the planes are rendered with respect to the axis length
+#define PLANE_SCALE 0.75
+// A number inversely proportional to how many lines appear inside a plane
+#define PLANE_LINES_SCALE 10.0
 // Defines how pixel movement of the mouse relates to rotation
 #define MOUSE_DRAG_FACTOR (1.0 / 200.0)
 

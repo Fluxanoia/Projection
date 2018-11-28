@@ -94,6 +94,7 @@ void zeroPlane(Plane* p) {
 // Reduces a vector until its norm is one
 void reduceToUnit(Vector* v) {
     double n = norm(v);
+    if (n == 0) return;
     v->x /= n;
     v->y /= n;
     v->z /= n;
@@ -114,6 +115,12 @@ double polarATan(double a, double b) {
     return 0;
 }
 
+// Alters acos to be more useful for polar conversions [acos(a / b)]
+double polarACos(double a, double b) {
+    if (b == 0) return 0; 
+    return acos(a / b);
+}
+
 // Fills in the vector with the coordinates corresponding to the input
 // polar values
 void vectorFromPolar(Vector* v, PolarVector* pv) {
@@ -124,7 +131,7 @@ void vectorFromPolar(Vector* v, PolarVector* pv) {
 
 void polarVectorFromCart(PolarVector* pv, Vector* v) {
     pv->r = norm(v);
-    pv->theta = acos(v->z / pv->r);
+    pv->theta = polarACos(v->z, pv->r);
     pv->phi = polarATan(v->y, v->x);
 }
 

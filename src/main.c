@@ -25,18 +25,24 @@ InputWindow* inputWindow = NULL;
 // The vector pointing to the view and the axes
 PolarVector* view = NULL;
 
+// The array of colours for graph items
+SDL_Color colors[MAX_ITEMS];
+
 // Whether the left mouse button is held down
 bool leftMouseDown;
+// The last examined x, y of the mouse with the LMB down
 int leftMouseDown_x, leftMouseDown_y;
 
 //
 //      HELPER FUNCTIONS
 // 
 
+// Checks if the window has focus for the keyboard
 bool isKeyFocused(SDL_Window* w) {
     return (SDL_GetWindowFlags(w) & SDL_WINDOW_INPUT_FOCUS) == SDL_WINDOW_INPUT_FOCUS;
 }
 
+// Checks if the window has focus for the mouse
 bool isMouseFocused(SDL_Window* w) {
     return (SDL_GetWindowFlags(w) & SDL_WINDOW_MOUSE_FOCUS) == SDL_WINDOW_MOUSE_FOCUS;
 }
@@ -45,6 +51,7 @@ bool isMouseFocused(SDL_Window* w) {
 //      RENDERING FUNCTIONS
 //
 
+// Gets the projected x, y screen coordinates of a 3D point
 void coordinatesTo(Tuple2* t, Point* p) {
     Vector v, u, w;
     Plane viewPlane;
@@ -75,14 +82,19 @@ void coordinatesTo(Tuple2* t, Point* p) {
 
 // React to mouse motion
 void mouseMotionEvent(SDL_MouseMotionEvent e) {
+    // If the LMB is down
     if (leftMouseDown) {
         int dx = leftMouseDown_x - e.x;
         int dy = leftMouseDown_y - e.y;
+        // Change the view angle based on the change in x and y
         view->phi += (double) dx * MOUSE_DRAG_FACTOR;
         view->theta += (double) dy * MOUSE_DRAG_FACTOR;
+        // Adjust theta as integrals of PI cause problems
         if (view->theta < 0) view->theta = 0.001;
         if (view->theta > PI) view->theta = PI - 0.001;        
+        // Tell the component to redraw
         redraw = true;
+        // Update the last examined x, y
         leftMouseDown_x = e.x;
         leftMouseDown_y = e.y;
     }
@@ -90,6 +102,7 @@ void mouseMotionEvent(SDL_MouseMotionEvent e) {
 
 // React to mouse button presses
 void mouseButtonEvent(SDL_MouseButtonEvent e) {
+    // Check when the LMB is down and update the x, y of it
     if (e.type == SDL_MOUSEBUTTONUP && e.button == SDL_BUTTON_LEFT) {
         leftMouseDown = false;
     }
@@ -101,6 +114,7 @@ void mouseButtonEvent(SDL_MouseButtonEvent e) {
 }
 
 void mouseWheelEvent(SDL_MouseWheelEvent e) {
+    // Change the zoom based on how much the mouse scrolls
     view->r += (double) e.y * -0.01;
     if (view->r < 0.01) view->r = 0.01;
     redraw = true;
@@ -108,8 +122,6 @@ void mouseWheelEvent(SDL_MouseWheelEvent e) {
 
 // React to key presses
 void keyEvent(SDL_KeyboardEvent e) {
-    switch (e.keysym.sym) {
-    }
 }
 
 //
@@ -118,11 +130,15 @@ void keyEvent(SDL_KeyboardEvent e) {
 
 // Draws a point
 void drawPoint(Point* p) {
+    // Get the screen coords of the point
     Tuple2 coords;
     coordinatesTo(&coords, p);
+    // Scale the point for the zoom level
     tuple2Multiply(&coords, 1 / view->r);
+    // Get the points x and y values
     int c_a = WINDOW_WIDTH_MID + coords.a;
     int c_b = WINDOW_HEIGHT_MID + coords.b;
+    // Draw an X centred at the point
     SDL_RenderDrawLine(renderer, c_a - 5, c_b - 5,
                                  c_a + 5, c_b + 5);
     SDL_RenderDrawLine(renderer, c_a + 5, c_b - 5,
@@ -133,19 +149,27 @@ void drawPoint(Point* p) {
 void drawLine(Line* line) {
     Point v;
     Tuple2 t_p, t_v;
+    // Get the vector of the line into a point
     v.x = line->v->x;
     v.y = line->v->y;
     v.z = line->v->z; 
+    // Gets the screen coordinates of the vector and the point
     coordinatesTo(&t_p, line->p);
     coordinatesTo(&t_v, &v);
+    // Scales the points by the zoom level
     tuple2Multiply(&t_p, 1 / view->r);
     tuple2Multiply(&t_v, 1 / view->r);
+    // Render the line from the point to the point + vector
     SDL_RenderDrawLine(renderer, WINDOW_WIDTH_MID + t_p.a, WINDOW_HEIGHT_MID + t_p.b,
                                  WINDOW_WIDTH_MID + t_p.a + t_v.a, WINDOW_HEIGHT_MID + t_p.b + t_v.b);
 }
 
 // Draws a plane
 void drawPlane(Plane* p) {
+    // If our coefficients are zero, return
+    if (p->x_coeff == 0 && p->y_coeff == 0 && p->z_coeff == 0) return;
+    // Get the normal verctor to the plane and make sure it extends
+    // such that it just touches the plane
     Vector norm;
     normalVector(&norm, p);
     reduceToUnit(&norm);
@@ -156,9 +180,12 @@ void drawPlane(Plane* p) {
     Point point;
     Vector e[4];
     Vector v1, v2;
+    // Get the orthonormals to the plane
     getOrthonormals(p, &v1, &v2);
-    vectorMultiply(&v1, AXIS_LENGTH >> 1);
-    vectorMultiply(&v2, AXIS_LENGTH >> 1);
+    // Multiply them so they are as large as we want the plane
+    vectorMultiply(&v1, PLANE_SCALE * AXIS_LENGTH);
+    vectorMultiply(&v2, PLANE_SCALE * AXIS_LENGTH);
+    // Get the four corners of the plane as points
     vectorSum(&e[0], &v1, &v2);
     vectorMultiply(&v2, -1);
     vectorSum(&e[1], &v1, &v2);
@@ -166,7 +193,7 @@ void drawPlane(Plane* p) {
     vectorSum(&e[2], &v1, &v2);
     vectorMultiply(&v2, -1);
     vectorSum(&e[3], &v1, &v2);
-
+    // Draw the line between the points
     for (int i = 1; i < 4; i++) {
         point = (Point) { e[i - 1].x + norm.x, e[i - 1].y + norm.y, e[i - 1].z + norm.z };
         vector = (Vector) { e[i].x - e[i - 1].x, e[i].y - e[i - 1].y, e[i].z - e[i - 1].z };
@@ -179,21 +206,25 @@ void drawPlane(Plane* p) {
     l.p = &point;
     l.v = &vector;
     drawLine(&l);
-
+    // Get the orthonormals again and resize appropriately
     getOrthonormals(p, &v1, &v2);
-    vectorMultiply(&v1, 10.0 * (AXIS_LENGTH / (double) AXIS_LENGTH));
-    vectorMultiply(&v2, 10.0 * (AXIS_LENGTH / (double) AXIS_LENGTH));
+    vectorMultiply(&v1, PLANE_LINES_SCALE);
+    vectorMultiply(&v2, PLANE_LINES_SCALE);
+    // Get the points we want to draw between
     Point p1 = (Point) { e[3].x + norm.x, e[3].y + norm.y, e[3].z + norm.z };
     Point p2 = (Point) { e[3].x + norm.x, e[3].y + norm.y, e[3].z + norm.z };
+    // Get the vectors of the lines we want to draw
     Vector u1 = (Vector) { e[0].x - e[3].x, e[0].y - e[3].y, e[0].z - e[3].z };
     Vector u2 = (Vector) { e[2].x - e[3].x, e[2].y - e[3].y, e[2].z - e[3].z };
-    for (int i = 1; i < (AXIS_LENGTH / 10); i++) {
+    for (int i = 1; i < 2 * (PLANE_SCALE * AXIS_LENGTH) / PLANE_LINES_SCALE; i++) {
+        // Move the points along
         p1.x += v1.x;
         p1.y += v1.y;
         p1.z += v1.z;
         p2.x -= v2.x;
         p2.y -= v2.y;
         p2.z -= v2.z;
+        // Draw both lines
         l.p = &p1;
         l.v = &u2;
         drawLine(&l);
@@ -206,12 +237,14 @@ void drawPlane(Plane* p) {
 // Draws an axis
 void drawAxis(int x, int y, int z) {
     Line l;
+    // Gets the vector to the end of the axis
     Vector l_v = { AXIS_LENGTH * x, AXIS_LENGTH * y, AXIS_LENGTH * z };
     Point l_p = { 0, 0, 0 };
     l.v = &l_v;
     l.p = &l_p;
+    // Draw the main axis line
     drawLine(&l);
-
+    // Sets up variables for future calculation
     int mod_x = 0, mod_y = 0, mod_z = 0;
     if (x == 0) {
         mod_x = 1;
@@ -220,18 +253,17 @@ void drawAxis(int x, int y, int z) {
     } else {
         mod_z = 1;
     }
-
+    // Draw the axis arrows
     l_p.x = l_v.x;
     l_p.y = l_v.y;
     l_p.z = l_v.z;
-    l_v.x = (AXIS_LENGTH / 20) * (mod_x - x);
-    l_v.y = (AXIS_LENGTH / 20) * (mod_y - y);
-    l_v.z = (AXIS_LENGTH / 20) * (mod_z - z);
+    l_v.x = AXIS_ARROW_SIZE * (mod_x - x);
+    l_v.y = AXIS_ARROW_SIZE * (mod_y - y);
+    l_v.z = AXIS_ARROW_SIZE * (mod_z - z);
     drawLine(&l);
-
-    l_v.x = (AXIS_LENGTH / 20) * (-mod_x - x);
-    l_v.y = (AXIS_LENGTH / 20) * (-mod_y - y);
-    l_v.z = (AXIS_LENGTH / 20) * (-mod_z - z);
+    l_v.x = AXIS_ARROW_SIZE * (-mod_x - x);
+    l_v.y = AXIS_ARROW_SIZE * (-mod_y - y);
+    l_v.z = AXIS_ARROW_SIZE * (-mod_z - z);
     drawLine(&l);
 
     Tuple2 coords;
@@ -265,33 +297,34 @@ void drawAxis(int x, int y, int z) {
 
 // Draws to the window
 void draw() {
+    // Attempt to draw the input window (it handles its own redraws)
     drawInputWindow(inputWindow);
-
+    // Check if we can draw
     if (!redraw) return;
     redraw = false;
-
+    // Clear the renderer
     SDL_RenderClear(renderer);
-
+    // Draws the background
     SDL_SetRenderDrawColor(renderer, BG_R, BG_G, BG_B, 255);
     SDL_RenderFillRect(renderer, NULL);
-
-    // ----------------
-
+    
+    // Start drawing the graph
+    // Draw the axes
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     drawAxis(1, 0, 0);
     drawAxis(0, 1, 0);
     drawAxis(0, 0, 1);
-
     SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
     drawAxis(-1, 0, 0);
     drawAxis(0, -1, 0);
     drawAxis(0, 0, -1);
-
-    SDL_SetRenderDrawColor(renderer, rand() % 256, rand() % 256, rand() % 256, 255);
-    char s[512];
-    int a, b, c, d;
+    // Sift through the input for anything worthwhile
+    char s[MAX_EQUATION_LEN];
+    float a, b, c, d;
     for (int i = 0; i < MAX_ITEMS; i++) {
-        sscanf(inputWindow->input[i], "%s %d %d %d %d", s, &a, &b, &c, &d);
+        if (strncmp(inputWindow->input[i], "", 1) == 0) continue;
+        sscanf(inputWindow->input[i], "%s %f %f %f %f", s, &a, &b, &c, &d);
+        SDL_SetRenderDrawColor(renderer, colors[i].r, colors[i].g, colors[i].b, colors[i].a);
         if (strncmp("plane", s, 5) == 0) {
             Plane p = { a, b, c, d };
             drawPlane(&p);
@@ -407,6 +440,14 @@ void test() {
 void init() {
     // Initialise important variables
     view = initPolarVector(0.5, PI / 4, PI / 4);
+    for (int i = 0; i < MAX_ITEMS; i++) {
+        SDL_Color c;
+        c.r = 120 + 120 * (i & 0x1);
+        c.g = 160 + 80 * ((i >> 1) & 0x1);
+        c.b = 200 + 40 * ((i >> 2) & 0x1);
+        c.a = 255;
+        colors[i] = c;
+    }
 }
 
 // Frees memory

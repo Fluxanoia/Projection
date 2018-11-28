@@ -59,6 +59,7 @@ void InputWindow_mouseButtonEvent(InputWindow* iw, SDL_MouseButtonEvent e) {
 
 // React to key presses
 void InputWindow_keyEvent(InputWindow* iw, SDL_KeyboardEvent e) {
+    const Uint8* keystate = SDL_GetKeyboardState(NULL);
     if (e.type == SDL_KEYDOWN) {
         if (isChar(e.keysym.sym) || isDigit(e.keysym.sym)) {
             if (strlen(iw->input[iw->caret_index]) < MAX_EQUATION_LEN - 1) {
@@ -74,18 +75,34 @@ void InputWindow_keyEvent(InputWindow* iw, SDL_KeyboardEvent e) {
     }
     switch (e.keysym.sym) {
         case SDLK_LEFT:
+            if (keystate[SDL_SCANCODE_LSHIFT]) {
+                iw->caret_location = 0;
+                iw->redraw = true;
+                break;
+            }
             if (e.type == SDL_KEYDOWN) {
                 if (iw->caret_location > 0) {
                     collapseCaret(iw);
                     iw->caret_location--;
                     iw->redraw = true;
+                } else {
+                    iw->caret_location = strlen(iw->input[iw->caret_index]);
+                    iw->redraw = true;
                 }
             }  
         break;
         case SDLK_RIGHT:
+            if (keystate[SDL_SCANCODE_LSHIFT]) {
+                iw->caret_location = strlen(iw->input[iw->caret_index]);
+                iw->redraw = true;
+                break;
+            }
             if (e.type == SDL_KEYDOWN) {
                 if (iw->caret_location < strlen(iw->input[iw->caret_index])) {
                     iw->caret_location++;
+                    iw->redraw = true;
+                } else {
+                    iw->caret_location = 0;
                     iw->redraw = true;
                 }
             }
@@ -110,6 +127,12 @@ void InputWindow_keyEvent(InputWindow* iw, SDL_KeyboardEvent e) {
             }
         break;
         case SDLK_BACKSPACE:
+            if (keystate[SDL_SCANCODE_LSHIFT]) {
+                strcpy(iw->input[iw->caret_index], "\0");
+                iw->caret_location = 0;
+                iw->redraw = true;
+                break;
+            }
             if (iw->caret_location == 0) break;
             if (e.type == SDL_KEYDOWN) {
                 int new_len = strlen(iw->input[iw->caret_index]);

@@ -1,5 +1,6 @@
 #include         <SDL.h>
 #include       <stdio.h>
+#include      <assert.h>
 #include     <stdbool.h>
 #include     <SDL_ttf.h>
 #include        "main.h"
@@ -147,6 +148,37 @@ void drawPoint(Point* p) {
 
 // Draws a line
 void drawLine(Line* line) {
+    // If the vector is zero, return
+    if (line->v->x == 0 && line->v->y == 0 && line->v->z == 0) return;
+    Point v;
+    Vector stretch;
+    Tuple2 t_p, t_v;
+    // Prepare the vector to be stretched
+    stretch.x = line->v->x;
+    stretch.y = line->v->y;
+    stretch.z = line->v->z;
+    // Stretch the vector
+    reduceToUnit(&stretch);
+    vectorMultiply(&stretch, AXIS_LENGTH << 1);
+    // Get the vector of the line into a point
+    v.x = stretch.x;
+    v.y = stretch.y;
+    v.z = stretch.z;
+    // Gets the screen coordinates of the vector and the point
+    coordinatesTo(&t_p, line->p);
+    coordinatesTo(&t_v, &v);
+    // Scales the points by the zoom level
+    tuple2Multiply(&t_p, 1 / view->r);
+    tuple2Multiply(&t_v, 1 / view->r);
+    // Render the line from the point to the point + vector
+    SDL_RenderDrawLine(renderer, WINDOW_WIDTH_MID + t_p.a, WINDOW_HEIGHT_MID + t_p.b,
+                                 WINDOW_WIDTH_MID + t_p.a + t_v.a, WINDOW_HEIGHT_MID + t_p.b + t_v.b);
+    SDL_RenderDrawLine(renderer, WINDOW_WIDTH_MID + t_p.a, WINDOW_HEIGHT_MID + t_p.b,
+                                 WINDOW_WIDTH_MID + t_p.a - t_v.a, WINDOW_HEIGHT_MID + t_p.b - t_v.b);
+}
+
+// Draws a line
+void drawLineSegment(Line* line) {
     Point v;
     Tuple2 t_p, t_v;
     // Get the vector of the line into a point
@@ -199,13 +231,13 @@ void drawPlane(Plane* p) {
         vector = (Vector) { e[i].x - e[i - 1].x, e[i].y - e[i - 1].y, e[i].z - e[i - 1].z };
         l.p = &point;
         l.v = &vector;
-        drawLine(&l);
+        drawLineSegment(&l);
     }
     point = (Point) { e[3].x + norm.x, e[3].y + norm.y, e[3].z + norm.z };
     vector = (Vector) { e[0].x - e[3].x, e[0].y - e[3].y, e[0].z - e[3].z };
     l.p = &point;
     l.v = &vector;
-    drawLine(&l);
+    drawLineSegment(&l);
     // Get the orthonormals again and resize appropriately
     getOrthonormals(p, &v1, &v2);
     vectorMultiply(&v1, PLANE_LINES_SCALE);
@@ -227,10 +259,10 @@ void drawPlane(Plane* p) {
         // Draw both lines
         l.p = &p1;
         l.v = &u2;
-        drawLine(&l);
+        drawLineSegment(&l);
         l.p = &p2;
         l.v = &u1;
-        drawLine(&l);
+        drawLineSegment(&l);
     }
 }
 
@@ -243,7 +275,7 @@ void drawAxis(int x, int y, int z) {
     l.v = &l_v;
     l.p = &l_p;
     // Draw the main axis line
-    drawLine(&l);
+    drawLineSegment(&l);
     // Sets up variables for future calculation
     int mod_x = 0, mod_y = 0, mod_z = 0;
     if (x == 0) {
@@ -260,11 +292,11 @@ void drawAxis(int x, int y, int z) {
     l_v.x = AXIS_ARROW_SIZE * (mod_x - x);
     l_v.y = AXIS_ARROW_SIZE * (mod_y - y);
     l_v.z = AXIS_ARROW_SIZE * (mod_z - z);
-    drawLine(&l);
+    drawLineSegment(&l);
     l_v.x = AXIS_ARROW_SIZE * (-mod_x - x);
     l_v.y = AXIS_ARROW_SIZE * (-mod_y - y);
     l_v.z = AXIS_ARROW_SIZE * (-mod_z - z);
-    drawLine(&l);
+    drawLineSegment(&l);
 
     Tuple2 coords;
     Point p = { (AXIS_LENGTH + 20) * x, (AXIS_LENGTH + 20) * y, (AXIS_LENGTH + 20) * z };
@@ -320,18 +352,29 @@ void draw() {
     drawAxis(0, 0, -1);
     // Sift through the input for anything worthwhile
     char s[MAX_EQUATION_LEN];
-    float a, b, c, d;
+    float a, b, c, d, e, f;
+    a = b = c = d = e = f = 0;
     for (int i = 0; i < MAX_ITEMS; i++) {
         if (strncmp(inputWindow->input[i], "", 1) == 0) continue;
-        sscanf(inputWindow->input[i], "%s %f %f %f %f", s, &a, &b, &c, &d);
+        sscanf(inputWindow->input[i], "%s %f %f %f %f %f %f", s, &a, &b, &c, &d, &e, &f);
         SDL_SetRenderDrawColor(renderer, colors[i].r, colors[i].g, colors[i].b, colors[i].a);
         if (strncmp("plane", s, 5) == 0) {
             Plane p = { a, b, c, d };
             drawPlane(&p);
+            a = b = c = d = e = f = 0;
         }
         if (strncmp("point", s, 5) == 0) {
             Point p = { a, b, c };
             drawPoint(&p);
+            a = b = c = d = e = f = 0;
+        }
+        if (strncmp("line", s, 4) == 0) {
+            Line l;
+            Point p = { a, b, c };
+            Vector v = { d, e, f };
+            l.p = &p;
+            l.v = &v;
+            drawLine(&l);            
         }
     }
 
@@ -435,6 +478,121 @@ void run() {
 }
 
 void test() {
+    Plane p;
+    Tuple2 t;
+    Vector v_a, v_b, v_c;
+
+    // vectorSum
+    v_b = (Vector) { 3, 8, -9 };
+    v_c = (Vector) { -4, 94, 22 };
+    vectorSum(&v_a, &v_b, &v_c);
+    assert(v_a.x == -1);
+    assert(v_a.y == 102);
+    assert(v_a.z == 13);
+
+    v_b = (Vector) { 91.92, -463.24, 2.0000 };
+    v_c = (Vector) { -4.33, 940, -30.0000 };
+    vectorSum(&v_a, &v_b, &v_c);
+    assert(v_a.x == 87.59);
+    assert(v_a.y == 476.76);
+    assert(v_a.z == -28);
+
+    v_b = (Vector) { 0.92738, 0.3399, 0.333333 };
+    v_c = (Vector) { 20000, 18263, 26371 };
+    vectorSum(&v_a, &v_b, &v_c);
+    assert(v_a.x == 20000.92738);
+    assert(v_a.y == 18263.3399);
+    assert(v_a.z == 26371.333333);
+
+    // vectorMultiply
+    v_a = (Vector) { 2, -3, 92 };
+    vectorMultiply(&v_a, 92.0);
+    vectorMultiply(&v_a, 1 / 92.0);
+    assert(v_a.x == 2);
+    assert(v_a.y == -3);
+    assert(v_a.z == 92);
+    vectorMultiply(&v_a, 23.0);
+    assert(v_a.x == 46);
+    assert(v_a.y == -69);
+    assert(v_a.z == 2116);
+
+    // tuple2Multiply
+    t = (Tuple2) { 3, 0.3627 };
+    tuple2Multiply(&t, 267.0);
+    tuple2Multiply(&t, 1 / 267.0);
+    assert(t.a == 3);
+    assert(t.b == 0.3627);
+    tuple2Multiply(&t, -99.0);
+    assert(t.a == -297);
+    assert(t.b == -35.9073);
+
+    // norm
+    v_a = (Vector) { 2, -3, 92 };
+    assert(norm(&v_a) == 7 * sqrt(173));
+    v_a = (Vector) { sqrt(2), sqrt(6), 9 };
+    assert(norm(&v_a) == sqrt(89));
+
+    // normalPlane / normalVector
+    v_a = (Vector) { 2, -3, 92 };
+    normalPlane(&p, &v_a);
+    assert(p.x_coeff == 2);
+    assert(p.y_coeff == -3);
+    assert(p.z_coeff == 92);
+    assert(p.constant == 0);
+    normalVector(&v_a, &p);
+    assert(v_a.x == 2);
+    assert(v_a.y == -3);
+    assert(v_a.z == 92);
+    
+    v_a = (Vector) { sqrt(34), -344, sqrt(91) };
+    normalPlane(&p, &v_a);
+    assert(p.x_coeff == sqrt(34));
+    assert(p.y_coeff == -344);
+    assert(p.z_coeff == sqrt(91));
+    assert(p.constant == 0);
+    normalVector(&v_a, &p);
+    assert(v_a.x == sqrt(34));
+    assert(v_a.y == -344);
+    assert(v_a.z == sqrt(91));
+
+    // zeroPlane / zeroVector
+    zeroPlane(&p);
+    assert(p.x_coeff == 0);
+    assert(p.y_coeff == 0);
+    assert(p.z_coeff == 0);
+    assert(p.constant == 0);
+    zeroVector(&v_a);
+    assert(v_a.x == 0);
+    assert(v_a.y == 0);
+    assert(v_a.z == 0);
+
+    // reduceToUnit
+    v_a = (Vector) { 0, 0, 0 };
+    reduceToUnit(&v_a);
+    assert(v_a.x == 0);
+    assert(v_a.y == 0);
+    assert(v_a.z == 0);
+    v_a = (Vector) { 3, 0, 0 };
+    reduceToUnit(&v_a);
+    assert(v_a.x == 1);
+    assert(v_a.y == 0);
+    assert(v_a.z == 0);
+    
+    // crossVector
+    v_b = (Vector) { 1, 0, 0 };
+    v_c = (Vector) { 0, 1, 0 };
+    crossVector(&v_a, &v_b, &v_c);
+    assert(v_a.x == 0);
+    assert(v_a.y == 0);
+    assert(v_a.z == 1);
+
+    v_b = (Vector) { -1, 0, 0 };
+    v_c = (Vector) { 0, -1, 0 };
+    crossVector(&v_a, &v_b, &v_c);
+    assert(v_a.x == 0);
+    assert(v_a.y == 0);
+    assert(v_a.z == 1);
+    
 }
 
 void init() {

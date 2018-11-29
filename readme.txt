@@ -8,8 +8,13 @@ Text input:
     backspacing to remove the whole line, or when moving the caret
     to skip to the front/end of the line.
 
+Command line arguments:
+    -test : runs tests, mainly of the math functions
+
 Commands:
-    plane a b c d : draws the plane ax + by + cz = d
-    point a b c   : draws the point (a, b, c)
+    plane a b c d    : draws the plane ax + by + cz = d
+    point a b c      : draws the point (a, b, c)
+    line a b c d e f : draws the line starting at (a, b, c) going in the
+                       direction of the vector (d, e, f)
 
 Required libraries: SDL2, SDL_ttf, math.h

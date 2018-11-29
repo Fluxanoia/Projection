@@ -17,4 +17,7 @@ Commands:
     line a b c d e f : draws the line starting at (a, b, c) going in the
                        direction of the vector (d, e, f)
 
+Using:
+    The NK57 Monospace font under a desktop license
+
 Required libraries: SDL2, SDL_ttf, math.h
